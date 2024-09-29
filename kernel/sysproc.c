@@ -7,7 +7,10 @@
 #include "proc.h"
 #include "fs.h"
 #include "file.h"
-#include "statvfs.h"
+#include "stat.h"
+
+static int bmap_free_blocks(void);
+static int free_inodes(void);
 
 uint64
 sys_exit(void)
@@ -94,33 +97,27 @@ sys_uptime(void)
 }
 
 /**
- * Fills the given statvfs structure with filesystem statistics.
- *
- * @param stats Pointer to a statvfs structure that will be populated with:
- *              - f_blocks: Total number of blocks.
- *              - f_bfree: Free blocks.
- *              - f_bavail: Free blocks available to non-superusers.
- *              - f_files: Total number of inodes.
- *              - f_ffree: Free inodes.
- *              - f_frsize: Block size (set to 512 bytes).
- *
- * Helper functions bmap_free_blocks() and free_inodes() are used to fetch free blocks and inodes.
+ * sys_statvfs - system call to gather filesystem statistics
+ * @returns total_blocks, free_blocks, used_blocks, total_inodes, free_inodes
  */
-void get_fs_stats(struct statvfs *stats) {
-    struct superblock *sb = &sb;
-
-    stats->f_blocks = sb->nblocks;
-    stats->f_bfree = bmap_free_blocks();
-    stats->f_bavail = stats->f_bfree;
-    
-    stats->f_files = sb->ninodes; 
-    stats->f_ffree = free_inodes();  
-
-    stats->f_frsize = 512;
-}
-
 uint64 sys_statvfs(void) {
-	struct statvfs stats;
-	get_fs_stats(&stats);
-	return (uint64)&stats;
+    struct {
+        uint total_blocks;
+        uint free_blocks;
+        uint used_blocks;
+        uint total_inodes;
+        uint free_inodes;
+    } stats;
+
+    stats.total_blocks = sb.nblocks;
+    stats.free_blocks = bmap_free_blocks();
+    stats.used_blocks = stats.total_blocks - stats.free_blocks;
+    stats.total_inodes = sb.ninodes;
+    stats.free_inodes = free_inodes();
+
+    if (argptr(0, (void*)&stats, sizeof(stats)) < 0) {
+        return -1;
+    }
+
+    return 0;
 }
