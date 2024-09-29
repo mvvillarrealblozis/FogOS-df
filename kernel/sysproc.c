@@ -7,10 +7,9 @@
 #include "proc.h"
 #include "fs.h"
 #include "file.h"
-#include "stat.h"
+#include "user/stat.h"
 
-static int bmap_free_blocks(void);
-static int free_inodes(void);
+extern struct superblock sb;
 
 uint64
 sys_exit(void)
@@ -98,26 +97,27 @@ sys_uptime(void)
 
 /**
  * sys_statvfs - system call to gather filesystem statistics
- * @returns total_blocks, free_blocks, used_blocks, total_inodes, free_inodes
+ * @returns 0 on success, -1 on failure
  */
 uint64 sys_statvfs(void) {
-    struct {
-        uint total_blocks;
-        uint free_blocks;
-        uint used_blocks;
-        uint total_inodes;
-        uint free_inodes;
-    } stats;
+    struct statvfs stats;
 
+    // Fill the stats structure with filesystem information
     stats.total_blocks = sb.nblocks;
     stats.free_blocks = bmap_free_blocks();
     stats.used_blocks = stats.total_blocks - stats.free_blocks;
     stats.total_inodes = sb.ninodes;
     stats.free_inodes = free_inodes();
 
-    if (argptr(0, (void*)&stats, sizeof(stats)) < 0) {
+	uint64 addr;
+	
+    argaddr(0,&addr);
+
+    // Copy the stats structure to the user space
+    if (copyout(myproc()->pagetable, addr, (char *)&stats, sizeof(stats)) < 0) {
         return -1;
     }
 
+    // Return success
     return 0;
 }

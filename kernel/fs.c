@@ -695,3 +695,67 @@ nameiparent(char *path, char *name)
 {
   return namex(path, 1, name);
 }
+
+#include "fs.h"
+#include "buf.h"
+
+/**
+ * bmap_isfree - Check if a block is free by inspecting the block bitmap.
+ * @param blockno: The block number to check
+ * @returns 1 if the block is free, 0 if the block is allocated
+ */
+int bmap_isfree(int blockno) {
+    struct buf *bp;
+    int bmap_block;
+    int block_offset;
+    int bit_index;
+
+    // Calculate which block in the bitmap we need to check
+    bmap_block = blockno / (BSIZE * 8);  // Each block in bitmap covers (BSIZE * 8) blocks
+    block_offset = blockno % (BSIZE * 8);  // Offset within the block
+    bit_index = block_offset % 8;  // Which bit in the byte to check
+
+    // Read the block bitmap into a buffer
+    bp = bread(ROOTDEV, sb.bmapstart + bmap_block);
+
+    // Check the relevant bit in the byte
+    int is_free = !(bp->data[block_offset / 8] & (1 << bit_index));  // 0 means free
+
+    brelse(bp);  // Release the buffer after use
+    return is_free;
+}
+
+
+/**
+ * bmap_free_blocks - Count the number of free blocks by inspecting the block bitmap.
+ * @returns the number of free blocks
+ */
+int bmap_free_blocks(void) {
+    int free_blocks = 0;
+
+    for (int b = 0; b < sb.nblocks; b++) {
+        if (bmap_isfree(b)) {
+            free_blocks++;
+        }
+    }
+
+    return free_blocks;
+}
+
+/**
+ * free_inodes - Count the number of free inodes by inspecting the inode bitmap.
+ * @returns the number of free inodes
+ */
+int free_inodes(void) {
+    int free_inodes = 0;
+
+    for (int i = 1; i < sb.ninodes; i++) {
+        struct inode *ip = iget(ROOTDEV, i);
+        if (ip->type == 0) {
+            free_inodes++;
+        }
+        iput(ip);
+    }
+
+    return free_inodes;
+}
